@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR = '/var/www/html'
+        DEPLOY_DIR = '/usr/share/nginx/html'
         SOURCE_DIR = 'dist'
         BACKUP_DIR = '/var/backups/nginx-deploy'
         EMAIL_TO = 'jeevanandam1412@gmail.com'
@@ -13,6 +13,7 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo 'Pulling latest code from GitHub...'
+
                 checkout scm
             }
         }
@@ -23,9 +24,11 @@ pipeline {
                     set -e
 
                     echo "Creating backup directory..."
+
                     sudo mkdir -p "$BACKUP_DIR"
 
                     echo "Creating deployment backup..."
+
                     sudo rm -rf "$BACKUP_DIR/latest"
                     sudo mkdir -p "$BACKUP_DIR/latest"
 
@@ -33,7 +36,7 @@ pipeline {
                         sudo cp -a "$DEPLOY_DIR/." "$BACKUP_DIR/latest/"
                     fi
 
-                    echo "Backup completed."
+                    echo "Backup completed successfully."
                 '''
             }
         }
@@ -53,6 +56,7 @@ pipeline {
                     echo "Deploying website files..."
 
                     sudo rm -rf "$DEPLOY_DIR"/*
+
                     sudo cp -a "$SOURCE_DIR/." "$DEPLOY_DIR/"
 
                     echo "Website files deployed successfully."
@@ -66,6 +70,7 @@ pipeline {
                     set -e
 
                     echo "Testing Nginx configuration..."
+
                     sudo nginx -t
 
                     echo "Nginx configuration test passed."
@@ -77,7 +82,7 @@ pipeline {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
                     input(
-                        message: 'Nginx configuration test passed. Approve deployment?',
+                        message: 'Nginx configuration test passed. Do you want to continue with the deployment?',
                         ok: 'Approve Deployment'
                     )
                 }
@@ -90,9 +95,11 @@ pipeline {
                     set -e
 
                     echo "Restarting Nginx..."
+
                     sudo systemctl restart nginx
 
                     echo "Checking Nginx status..."
+
                     sudo systemctl is-active --quiet nginx
 
                     echo "Nginx restarted successfully."
@@ -119,7 +126,9 @@ pipeline {
     post {
 
         success {
-            echo 'Nginx deployment completed successfully.'
+            echo '======================================'
+            echo 'Nginx deployment completed successfully'
+            echo '======================================'
 
             emailext(
                 subject: "SUCCESS: Nginx Deployment - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
@@ -138,7 +147,7 @@ ${DEPLOY_DIR}
 
 Nginx configuration test passed.
 Manual approval was received.
-Nginx restarted successfully.
+Nginx was restarted successfully.
 Health check passed.
 
 Build URL:
@@ -149,7 +158,9 @@ ${env.BUILD_URL}
         }
 
         failure {
-            echo 'Nginx deployment failed.'
+            echo '======================================'
+            echo 'Nginx deployment FAILED'
+            echo '======================================'
 
             emailext(
                 subject: "FAILED: Nginx Deployment - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
@@ -164,6 +175,7 @@ Status    : FAILED
 The deployment did not complete successfully.
 
 Possible reasons:
+
 - GitHub checkout failed
 - Source directory missing
 - File copy failed
@@ -179,7 +191,9 @@ ${env.BUILD_URL}
         }
 
         aborted {
-            echo 'Nginx deployment was aborted.'
+            echo '======================================'
+            echo 'Nginx deployment was ABORTED'
+            echo '======================================'
 
             emailext(
                 subject: "ABORTED: Nginx Deployment - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
@@ -191,7 +205,7 @@ Build     : #${env.BUILD_NUMBER}
 Server    : ${env.NODE_NAME}
 Status    : ABORTED
 
-The deployment was cancelled or manual approval timed out.
+The deployment was cancelled or the manual approval timed out.
 
 Build URL:
 ${env.BUILD_URL}
