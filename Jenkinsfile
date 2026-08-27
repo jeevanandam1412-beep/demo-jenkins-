@@ -5,33 +5,15 @@ pipeline {
         DEPLOY_DIR = '/var/www/html'
         SOURCE_DIR = 'dist'
         BACKUP_DIR = '/var/backups/nginx-deploy'
-        EMAIL_TO   = 'your-email@gmail.com'
+        EMAIL_TO = 'jeevanandam1412@gmail.com'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                echo 'Pulling code from GitHub...'
-
+                echo 'Pulling latest code from GitHub...'
                 checkout scm
-
-                sh '''
-                    set -e
-
-                    echo "Current commit:"
-                    git rev-parse HEAD
-
-                    echo "Checking source directory..."
-
-                    if [ ! -d "$SOURCE_DIR" ]; then
-                        echo "ERROR: dist directory does not exist!"
-                        exit 1
-                    fi
-
-                    echo "Source files:"
-                    ls -la "$SOURCE_DIR"
-                '''
             }
         }
 
@@ -41,11 +23,9 @@ pipeline {
                     set -e
 
                     echo "Creating backup directory..."
-
                     sudo mkdir -p "$BACKUP_DIR"
 
-                    echo "Creating backup..."
-
+                    echo "Creating deployment backup..."
                     sudo rm -rf "$BACKUP_DIR/latest"
                     sudo mkdir -p "$BACKUP_DIR/latest"
 
@@ -53,7 +33,7 @@ pipeline {
                         sudo cp -a "$DEPLOY_DIR/." "$BACKUP_DIR/latest/"
                     fi
 
-                    echo "Backup completed successfully."
+                    echo "Backup completed."
                 '''
             }
         }
@@ -63,18 +43,19 @@ pipeline {
                 sh '''
                     set -e
 
+                    echo "Checking source directory..."
+
+                    if [ ! -d "$SOURCE_DIR" ]; then
+                        echo "ERROR: $SOURCE_DIR directory does not exist"
+                        exit 1
+                    fi
+
                     echo "Deploying website files..."
 
-                    sudo mkdir -p "$DEPLOY_DIR"
-
                     sudo rm -rf "$DEPLOY_DIR"/*
-
                     sudo cp -a "$SOURCE_DIR/." "$DEPLOY_DIR/"
 
-                    echo "Deployment files copied successfully."
-
-                    echo "Files currently in Nginx directory:"
-                    sudo ls -la "$DEPLOY_DIR"
+                    echo "Website files deployed successfully."
                 '''
             }
         }
@@ -85,10 +66,9 @@ pipeline {
                     set -e
 
                     echo "Testing Nginx configuration..."
-
                     sudo nginx -t
 
-                    echo "Nginx configuration test PASSED."
+                    echo "Nginx configuration test passed."
                 '''
             }
         }
@@ -97,7 +77,7 @@ pipeline {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
                     input(
-                        message: 'nginx -t passed. Approve deployment and restart Nginx?',
+                        message: 'Nginx configuration test passed. Approve deployment?',
                         ok: 'Approve Deployment'
                     )
                 }
@@ -110,14 +90,12 @@ pipeline {
                     set -e
 
                     echo "Restarting Nginx..."
-
                     sudo systemctl restart nginx
 
                     echo "Checking Nginx status..."
-
                     sudo systemctl is-active --quiet nginx
 
-                    echo "Nginx is running successfully."
+                    echo "Nginx restarted successfully."
                 '''
             }
         }
@@ -127,12 +105,12 @@ pipeline {
                 sh '''
                     set -e
 
-                    echo "Running website health check..."
+                    echo "Performing health check..."
 
                     curl -f http://localhost/
 
                     echo ""
-                    echo "Website health check PASSED."
+                    echo "Health check successful."
                 '''
             }
         }
@@ -141,92 +119,84 @@ pipeline {
     post {
 
         success {
-            echo '======================================'
-            echo 'Nginx deployment SUCCESSFUL'
-            echo '======================================'
+            echo 'Nginx deployment completed successfully.'
 
             emailext(
-                to: "${EMAIL_TO}",
                 subject: "SUCCESS: Nginx Deployment - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: """
 Nginx Deployment Successful
 
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Server: ${env.NODE_NAME}
-Status: SUCCESS
+Job       : ${env.JOB_NAME}
+Build     : #${env.BUILD_NUMBER}
+Server    : ${env.NODE_NAME}
+Status    : SUCCESS
 
 GitHub code was pulled successfully.
 
-Source:
-${SOURCE_DIR}
-
-Deployment directory:
+Files deployed to:
 ${DEPLOY_DIR}
 
-Nginx configuration test:
-PASSED
-
-Manual approval:
-APPROVED
-
-Nginx restart:
-SUCCESSFUL
-
-Health check:
-PASSED
+Nginx configuration test passed.
+Manual approval was received.
+Nginx restarted successfully.
+Health check passed.
 
 Build URL:
 ${env.BUILD_URL}
-"""
+""",
+                to: "${EMAIL_TO}"
             )
         }
 
         failure {
-            echo '======================================'
-            echo 'Nginx deployment FAILED'
-            echo '======================================'
+            echo 'Nginx deployment failed.'
 
             emailext(
-                to: "${EMAIL_TO}",
                 subject: "FAILED: Nginx Deployment - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: """
 Nginx Deployment FAILED
 
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Server: ${env.NODE_NAME}
-Status: FAILED
+Job       : ${env.JOB_NAME}
+Build     : #${env.BUILD_NUMBER}
+Server    : ${env.NODE_NAME}
+Status    : FAILED
 
-Please check the Jenkins Console Output.
+The deployment did not complete successfully.
+
+Possible reasons:
+- GitHub checkout failed
+- Source directory missing
+- File copy failed
+- Nginx configuration test failed
+- Nginx restart failed
+- Health check failed
 
 Build URL:
 ${env.BUILD_URL}
-"""
+""",
+                to: "${EMAIL_TO}"
             )
         }
 
         aborted {
-            echo '======================================'
-            echo 'Nginx deployment ABORTED'
-            echo '======================================'
+            echo 'Nginx deployment was aborted.'
 
             emailext(
-                to: "${EMAIL_TO}",
                 subject: "ABORTED: Nginx Deployment - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: """
 Nginx Deployment ABORTED
 
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Server: ${env.NODE_NAME}
-Status: ABORTED
+Job       : ${env.JOB_NAME}
+Build     : #${env.BUILD_NUMBER}
+Server    : ${env.NODE_NAME}
+Status    : ABORTED
 
-The deployment was cancelled or the approval timed out.
+The deployment was cancelled or manual approval timed out.
 
 Build URL:
 ${env.BUILD_URL}
-"""
+""",
+                to: "${EMAIL_TO}"
             )
         }
     }
